@@ -29,13 +29,36 @@ int[] previousFrame;
 Capture video;
 
 int WIDTH = 640;
-int HEIGHT = 480;
+int HEIGHT = 360;
+
+int CAMERA_INDEX = 3;
 
 PImage diff_img;
 PImage img;
 
+// SOUND 
+import supercollider.*;
+import oscP5.*;
+
+ArrayList <Synth> synths;
+
 void setup() {
-  size(640, 480, P2D);
+  size(640, 360, P2D);
+  
+  
+  synths = new ArrayList<Synth>();
+    
+  for(int i = 0; i < 10; i++){
+    Synth _synth;
+    String name = "sine" + i;
+    println("name",  name);
+    _synth = new Synth(name);
+    _synth.set("amp", 0.0);
+    _synth.set("freqx", 80*i);
+    _synth.set("freqy", 40*i);
+    _synth.create();
+    synths.add(_synth);
+  }
   
   canvas = createGraphics(WIDTH, HEIGHT, P2D);
   
@@ -56,7 +79,7 @@ void setup() {
    }
   // This the default video input, see the GettingStartedCapture 
   // example if it creates an error
-  video = new Capture(this, cameras[0]);  
+  video = new Capture(this, cameras[CAMERA_INDEX]);  
   
   println(video.width);
   
@@ -79,22 +102,24 @@ void setup() {
 }
 
 void draw() { 
+  background(0);     
   if (video.available()) {    
     draw_ripples();        
     if(updateFrame){
       updatePreviousFrame();
     }
-
-    canvas.background(0);
+    canvas.beginDraw();
+    canvas.background(0, 0);  
+    canvas.endDraw();
     // When using video to manipulate the screen, use video.available() and
     // video.read() inside the draw() method so that it's safe to draw to the screen       
     frameDiff();              
     //filter(BLUR);
     diff_img.updatePixels();
-    // image(diff_img,0,0,width,height);
+    image(diff_img,0,0,width,height);
     img.copy(diff_img, 0, 0, video.width, video.height, 
         0, 0, img.width, img.height);
-    fastblur(img, 2);    
+    fastblur(img, 3);    
     
     img.loadPixels();
     theBlobDetection.computeBlobs(img.pixels);
@@ -108,7 +133,7 @@ void draw() {
   }       
   //image(diff_img,0,0,width,height); 
   //server.sendScreen();
-  //server.sendImage(canvas);
+  server.sendImage(canvas);
 }
 
 void frameDiff(){
@@ -165,10 +190,13 @@ void frameDiff(){
 
 void drawBlobsAndEdges(boolean drawBlobs, boolean drawEdges)
 {
+  for(int i = 0; i < synths.size(); i++){
+      synths.get(i).set("amp", 0.0);
+    }
   for(int i = 0; i < elements.size(); i ++ ) {
      elements.remove(i); 
   }
-  
+  int i = 0; // found blobs
   noFill();
   Blob b;
   EdgeVertex eA,eB;
@@ -176,10 +204,11 @@ void drawBlobsAndEdges(boolean drawBlobs, boolean drawEdges)
   {
     b=theBlobDetection.getBlob(n);
     if (b!=null)
-    {
+    {      
       // Edges
       if (drawEdges)
-      {
+      {        
+        canvas.beginDraw();          
         strokeWeight(3);
         stroke(0,255,0);
         for (int m=0;m<b.getEdgeNb();m++)
@@ -187,14 +216,15 @@ void drawBlobsAndEdges(boolean drawBlobs, boolean drawEdges)
           eA = b.getEdgeVertexA(m);
           eB = b.getEdgeVertexB(m);
           if (eA !=null && eB !=null)
-            canvas.beginDraw();  
+           
             canvas.stroke(0, 255, 0);
             canvas.line(
               eA.x*width, eA.y*height, 
               eB.x*width, eB.y*height
               );
-            canvas.endDraw();
+            
         }
+        canvas.endDraw();
       }
 
       // Blobs
@@ -206,19 +236,23 @@ void drawBlobsAndEdges(boolean drawBlobs, boolean drawEdges)
           
         ellipseMode(CENTER);
         
-        fill(100);  // Set fill to gray                       
-        
+        // fill(100);  // Set fill to gray                       
+        fill(125, 0 , 255);
         float xCenter = b.xMin*width + b.w*width/2;
         float yCenter = b.yMin*height + b.h*height/2;
-        
+                   
         PVector pos = new PVector(xCenter, yCenter);
         
         previous[int(xCenter)][int(yCenter)] = 1000;
         
-        elements.add(pos);
-        
-        ellipse(xCenter, yCenter, 10, 10);
-        
+        //if(b.w*width > 10){
+           elements.add(pos);
+           ellipse(xCenter, yCenter, 10, 10); 
+            synths.get(i).set("amp", 0.1);
+            synths.get(i).set("freqx", 40 + ((xCenter-yCenter) * i ));
+            synths.get(i).set("freqy", 40 + ((b.w*width)));     
+            i++;
+        //}                     
       }
     }
   }   
@@ -239,6 +273,11 @@ void draw_lines(){
 void updatePreviousFrame(){
   println("update ref frame!");
   if (video.available()) {
+    for(int i = 0; i < synths.size(); i++){
+      synths.get(i).set("amp", 0.0);
+    }
+    
+    
     video.read(); // Read the new frame from the camera
     video.loadPixels(); // Make its pixels[] array available
       for (int i = 0; i < numPixels; i++) { // For each pixel in the video frame...
@@ -326,4 +365,13 @@ void keyPressed() {
      green = true;
    }
  }  
+}
+
+void exit()
+{
+    //synth2.free();
+    for(int i = 0; i < synths.size(); i++){
+      synths.get(i).free();
+    }
+    super.exit();
 }
